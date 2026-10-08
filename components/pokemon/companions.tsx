@@ -4,6 +4,7 @@ import { experimental_useSidebarThreads, useBbNavigate } from "@get-bb/plugin-sd
 import { Button } from "@/components/ui/button";
 import { starters, type StarterId } from "../../pokemon";
 import { useCollection } from "../../hooks/use-collection";
+import { usePreferences } from "../../hooks/use-preferences";
 import { animatedSpriteUrl, spriteUrl } from "../../lib/pokemon/media";
 
 type EvolutionSpriteProps = {
@@ -102,9 +103,11 @@ function savePosition(position: Position) {
 export function FloatingCompanion() {
 	const { collection } = useCollection();
 	const { threads } = experimental_useSidebarThreads();
+	const preferences = usePreferences();
 	const [position, setPosition] = useState(readSavedPosition);
 	const [isDragging, setIsDragging] = useState(false);
 	const isRunning = hasRunningThread(threads);
+	const isBouncing = isRunning && preferences?.bounceCompanionWhileRunning === true;
 
 	useEffect(() => {
 		if (!isDragging) return;
@@ -134,7 +137,7 @@ export function FloatingCompanion() {
 	const companionName = companion?.pokemonName ?? starter.name;
 
 	return createPortal(
-		<div className={`pokemon-floating-companion fixed z-50 cursor-grab select-none ${isDragging ? "cursor-grabbing" : ""} ${isRunning ? "pokemon-bouncing" : ""}`} style={{ left: position.x, top: position.y }} onMouseDown={() => setIsDragging(true)} title={`${companionName} · Lv. ${companion?.level ?? 5}${isRunning ? " - Running with your agent!" : ""}`}>
+		<div className={`pokemon-floating-companion fixed z-50 cursor-grab select-none ${isDragging ? "cursor-grabbing" : ""} ${isBouncing ? "pokemon-bouncing" : ""}`} style={{ left: position.x, top: position.y }} onMouseDown={() => setIsDragging(true)} title={`${companionName} · Lv. ${companion?.level ?? 5}${isRunning ? " - Running with your agent!" : ""}`}>
 			{companion === null ? <img src={animated ?? fallback} alt={companionName} className="size-16 object-contain [image-rendering:pixelated] drop-shadow-lg" draggable={false} /> : (
 				<EvolutionSprite captureId={companion.captureId} pokemonName={companionName} pokemonNumber={companion.pokemonNumber} spriteUrl={animated ?? fallback} className="size-16 drop-shadow-lg" showMessage />
 			)}
@@ -146,9 +149,11 @@ export function FloatingCompanion() {
 export function ThreadCompanion({ threadId, isCompactViewport }: { threadId: string; isCompactViewport: boolean }) {
 	const { collection } = useCollection();
 	const { threads } = experimental_useSidebarThreads();
+	const preferences = usePreferences();
 	const navigate = useBbNavigate();
 	const thread = threads.find((candidate) => candidate.id === threadId);
 	const running = thread !== undefined && (thread.indicator === "runtime" || Object.values(thread.activity).some((count) => count > 0));
+	const bouncing = running && preferences?.bounceCompanionWhileRunning === true;
 	if (collection?.starter === null || collection === null) return null;
 	const starter = starters.find((candidate) => candidate.id === collection.starter)!;
 	const companion = collection.companion;
@@ -156,8 +161,8 @@ export function ThreadCompanion({ threadId, isCompactViewport }: { threadId: str
 
 	return (
 		<Button variant="ghost" size={isCompactViewport ? "icon" : "sm"} className="h-7 gap-1.5 px-1.5" aria-label={`Open Pokemon collection. ${companionName} is level ${companion?.level ?? 5} and ${running ? "running with your agent" : "resting"}.`} onClick={() => navigate.toPluginPanel("collection")}>
-			{companion === null ? <PixelStarter id={starter.id} running={running} /> : (
-				<EvolutionSprite captureId={companion.captureId} pokemonName={companionName} pokemonNumber={companion.pokemonNumber} spriteUrl={companion.spriteUrl ?? spriteUrl(companion.pokemonNumber)} className={`size-7 ${running ? "pokemon-bouncing" : ""}`}>
+			{companion === null ? <PixelStarter id={starter.id} running={bouncing} /> : (
+				<EvolutionSprite captureId={companion.captureId} pokemonName={companionName} pokemonNumber={companion.pokemonNumber} spriteUrl={companion.spriteUrl ?? spriteUrl(companion.pokemonNumber)} className={`size-7 ${bouncing ? "pokemon-bouncing" : ""}`}>
 					{companion.pokemonNumber === starter.number ? <PixelStarter id={starter.id} /> : undefined}
 				</EvolutionSprite>
 			)}

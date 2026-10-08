@@ -44,6 +44,7 @@ function SettingsPage() {
   const [watchedRepositories, setWatchedRepositories] = useState<string[]>([]);
   const [projectManagementTool, setProjectManagementTool] = useState<PokemonSettings["projectManagementTool"]>("shortcut");
   const [showEvolutionAnimations, setShowEvolutionAnimations] = useState(true);
+  const [bounceCompanionWhileRunning, setBounceCompanionWhileRunning] = useState(true);
   const [githubToken, setGithubToken] = useState("");
   const [shortcutToken, setShortcutToken] = useState("");
   const [jiraToken, setJiraToken] = useState("");
@@ -58,6 +59,7 @@ function SettingsPage() {
     setWatchedRepositories(next.watchedRepositories);
     setProjectManagementTool(next.projectManagementTool);
     setShowEvolutionAnimations(next.showEvolutionAnimations);
+    setBounceCompanionWhileRunning(next.bounceCompanionWhileRunning);
     setJiraBaseUrl(next.jiraBaseUrl);
     setJiraEmail(next.jiraEmail);
     setError(null);
@@ -103,7 +105,7 @@ function SettingsPage() {
     setPending("settings");
     setSaved(false);
     try {
-      acceptSettings(await rpc.call("settings_update", { watchedRepositories, projectManagementTool, showEvolutionAnimations }));
+      acceptSettings(await rpc.call("settings_update", { watchedRepositories, projectManagementTool, showEvolutionAnimations, bounceCompanionWhileRunning }));
       setSaved(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -126,10 +128,14 @@ function SettingsPage() {
 
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="font-semibold">Pokemon experiences</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Choose whether evolutions and Egg hatches interrupt the screen with classic animations.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Choose whether evolutions, Egg hatches, and your companion animate on screen.</p>
           <label className="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 p-3">
             <span><strong className="block text-sm">Show evolution and hatching animations</strong><span className="mt-0.5 block text-xs text-muted-foreground">You can still skip any animation with Escape, the close button, or Skip.</span></span>
             <input aria-label="Show evolution and hatching animations" type="checkbox" className="size-4 accent-primary" checked={showEvolutionAnimations} onChange={(event) => setShowEvolutionAnimations(event.target.checked)} />
+          </label>
+          <label className="mt-3 flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 p-3">
+            <span><strong className="block text-sm">Bounce companion while agents run</strong><span className="mt-0.5 block text-xs text-muted-foreground">When off, your companion stays in place. Its animated sprite still plays.</span></span>
+            <input aria-label="Bounce companion while agents run" type="checkbox" className="size-4 accent-primary" checked={bounceCompanionWhileRunning} onChange={(event) => setBounceCompanionWhileRunning(event.target.checked)} />
           </label>
         </section>
 
