@@ -49,14 +49,15 @@ const settingsSchema = z.object({
 	repositories: z.array(repositorySchema), watchedRepositories: z.array(z.string()),
 	projectManagementTool: projectManagementToolSchema,
 	connections: z.object({ github: connectionSchema, shortcut: connectionSchema, jira: connectionSchema }),
-	jiraBaseUrl: z.string(), jiraEmail: z.string(), showEvolutionAnimations: z.boolean(),
+	jiraBaseUrl: z.string(), jiraEmail: z.string(), showEvolutionAnimations: z.boolean(), bounceCompanionWhileRunning: z.boolean(),
 });
-const preferencesSchema = settingsSchema.pick({ showEvolutionAnimations: true });
+const preferencesSchema = settingsSchema.pick({ showEvolutionAnimations: true, bounceCompanionWhileRunning: true });
 
 export type Collection = z.infer<typeof collectionSchema>;
 export type Capture = z.infer<typeof captureSchema>;
 export type PokemonRarity = z.infer<typeof raritySchema>;
 export type PokemonSettings = z.infer<typeof settingsSchema>;
+export type PokemonPreferences = z.infer<typeof preferencesSchema>;
 export const rpcContract = defineRpcContract({
 	collection_get: { input: z.null(), output: collectionSchema },
 	collection_reset: { input: z.null(), output: collectionSchema },
@@ -70,6 +71,7 @@ export const rpcContract = defineRpcContract({
 			watchedRepositories: z.array(z.string().regex(/^[^/\s]+\/[^/\s]+$/u)).max(100),
 			projectManagementTool: projectManagementToolSchema,
 			showEvolutionAnimations: z.boolean(),
+			bounceCompanionWhileRunning: z.boolean(),
 		}).strict(),
 		output: settingsSchema,
 	},
@@ -544,6 +546,7 @@ export default async function plugin(bb: BbPluginApi) {
 		jiraEmail: { type: "string", label: "Jira account email", default: "" },
 		projectManagementTool: { type: "select", label: "Project management tool", options: ["shortcut", "jira", "github_issues"], default: "shortcut" },
 		showEvolutionAnimations: { type: "boolean", label: "Show evolution animations", default: true },
+		bounceCompanionWhileRunning: { type: "boolean", label: "Bounce companion while agents run", default: true },
 	});
 	const host = bb.hosts.experimental_client({ contract: hostContract });
 	const lifecycle = new AbortController();
@@ -565,6 +568,7 @@ export default async function plugin(bb: BbPluginApi) {
 			jiraBaseUrl: values.jiraBaseUrl,
 			jiraEmail: values.jiraEmail,
 			showEvolutionAnimations: values.showEvolutionAnimations,
+			bounceCompanionWhileRunning: values.bounceCompanionWhileRunning,
 		};
 	}
 	bb.rpc.register(rpcContract, {
@@ -574,8 +578,11 @@ export default async function plugin(bb: BbPluginApi) {
 		starter_select: ({ starterId }) => selectStarter(db, bb, starterId),
 		companion_select: ({ captureId }) => selectCompanion(db, bb, captureId),
 		settings_get: () => readSettings(),
-		preferences_get: async () => ({ showEvolutionAnimations: (await settings.get()).showEvolutionAnimations }),
-		settings_update: async ({ watchedRepositories, projectManagementTool, showEvolutionAnimations }) => {
+		preferences_get: async () => {
+			const { showEvolutionAnimations, bounceCompanionWhileRunning } = await settings.get();
+			return { showEvolutionAnimations, bounceCompanionWhileRunning };
+		},
+		settings_update: async ({ watchedRepositories, projectManagementTool, showEvolutionAnimations, bounceCompanionWhileRunning }) => {
 			const current = await bb.storage.kv.get<string[]>("watchedRepositories") ?? [];
 			const additions = watchedRepositories.filter((repository) => !current.includes(repository));
 			if (additions.length > 0) {
@@ -584,9 +591,9 @@ export default async function plugin(bb: BbPluginApi) {
 			}
 			await Promise.all([
 				bb.storage.kv.set("watchedRepositories", [...new Set(watchedRepositories)].sort()),
-				settings.experimental_set({ projectManagementTool, showEvolutionAnimations }),
+				settings.experimental_set({ projectManagementTool, showEvolutionAnimations, bounceCompanionWhileRunning }),
 			]);
-			bb.realtime.publish("preferences-changed", { showEvolutionAnimations });
+			bb.realtime.publish("preferences-changed", { showEvolutionAnimations, bounceCompanionWhileRunning });
 			return readSettings();
 		},
 		connection_save: async (input) => {

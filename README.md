@@ -10,7 +10,9 @@ animated sprites, grouped duplicate counts, encounter details, rarity, type,
 and generation badges, shiny/type/rarity/generation filters, paginated Pokedex
 entries, and an egg incubator. The companion also appears
 in the thread header and as a draggable overlay that becomes more active while
-agents are working. The overlay stays where you drop it after a refresh.
+agents are working. The overlay stays where you drop it after a refresh. Turn
+off "Bounce companion while agents run" in Pokemon Collection settings to keep
+the companion in place; its animated sprite still plays.
 
 Agent usage awards one experience point per 5,000 tokens. Incubating eggs gain
 one step per 2,500 tokens. Any caught or hatched Pokémon can become the active

@@ -288,8 +288,8 @@ describe("Pokemon Catcher server", () => {
 		expect(harness.inspection.registrations.settingsDescriptors.githubToken).toMatchObject({ secret: true });
 		const initial = await harness.behavior.callRpc("settings_get", null) as { repositories: Array<{ fullName: string }>; connections: { github: { account: string } } };
 		expect(initial).toMatchObject({ repositories: [{ fullName: "acme/pokedex" }], connections: { github: { account: "misty" } } });
-		await harness.behavior.callRpc("settings_update", { watchedRepositories: ["acme/pokedex"], projectManagementTool: "github_issues", showEvolutionAnimations: false });
-		expect(await harness.behavior.callRpc("preferences_get", null)).toEqual({ showEvolutionAnimations: false });
+		await harness.behavior.callRpc("settings_update", { watchedRepositories: ["acme/pokedex"], projectManagementTool: "github_issues", showEvolutionAnimations: false, bounceCompanionWhileRunning: false });
+		expect(await harness.behavior.callRpc("preferences_get", null)).toEqual({ showEvolutionAnimations: false, bounceCompanionWhileRunning: false });
 
 		const baseline = harness.behavior.runService("github-milestone-detector");
 		await vi.waitFor(() => expect(eventRequests).toBe(1));

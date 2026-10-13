@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Collection, PokemonSettings } from "./server";
 
@@ -101,6 +102,31 @@ const collection: Collection = {
 	shinyCaptures: 1,
 };
 
+const runningThread: PluginSidebarThread = {
+	id: "thr_running",
+	projectId: "proj_pokedex",
+	title: "Catch them all",
+	titleFallback: null,
+	parentThreadId: null,
+	sectionId: null,
+	originKind: null,
+	originPluginId: null,
+	providerId: "claude-code",
+	hasPendingInteraction: false,
+	activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0, goals: 0 },
+	indicator: "runtime",
+	indicatorLabel: null,
+	isUnread: false,
+	isPinned: false,
+	isArchived: false,
+	environment: null,
+	host: null,
+	createdAt: 0,
+	updatedAt: 0,
+	lastReadAt: null,
+	latestAttentionAt: 0,
+};
+
 const pokemonSettings: PokemonSettings = {
 	repositories: [
 		{ fullName: "acme/pokedex", htmlUrl: "https://github.com/acme/pokedex", private: false },
@@ -109,6 +135,7 @@ const pokemonSettings: PokemonSettings = {
 	watchedRepositories: ["acme/pokedex"],
 	projectManagementTool: "shortcut",
 	showEvolutionAnimations: true,
+	bounceCompanionWhileRunning: true,
 	connections: {
 		github: { authenticated: true, account: "misty", error: null },
 		shortcut: { authenticated: false, account: null, error: null },
@@ -297,7 +324,7 @@ describe("Pokemon collection app", () => {
 		let preferenceReads = 0;
 		const slot = renderSlot(overlay, {}, {
 			rpc: {
-				preferences_get: () => { preferenceReads += 1; return { showEvolutionAnimations: true }; },
+				preferences_get: () => { preferenceReads += 1; return { showEvolutionAnimations: true, bounceCompanionWhileRunning: true }; },
 			},
 		});
 
@@ -314,12 +341,12 @@ describe("Pokemon collection app", () => {
 		preferenceReads = 0;
 		const disabledSlot = renderSlot(overlay, {}, {
 			rpc: {
-				preferences_get: () => { preferenceReads += 1; return { showEvolutionAnimations }; },
+				preferences_get: () => { preferenceReads += 1; return { showEvolutionAnimations, bounceCompanionWhileRunning: true }; },
 			},
 		});
 		await vi.waitFor(() => expect(preferenceReads).toBe(1));
 		showEvolutionAnimations = false;
-		await disabledSlot.behavior.emitRealtime("preferences-changed", { showEvolutionAnimations: false });
+		await disabledSlot.behavior.emitRealtime("preferences-changed", { showEvolutionAnimations: false, bounceCompanionWhileRunning: true });
 		await vi.waitFor(() => expect(preferenceReads).toBe(2));
 		await disabledSlot.behavior.emitRealtime("collection-changed", evolutionSignal);
 		expect(disabledSlot.queryByRole("dialog")).toBeNull();
@@ -331,7 +358,7 @@ describe("Pokemon collection app", () => {
 		const overlay = app.appOverlays.find(({ id }) => id === "evolution-experience")!;
 		const slot = renderSlot(overlay, {}, {
 			rpc: {
-				preferences_get: () => ({ showEvolutionAnimations: true }),
+				preferences_get: () => ({ showEvolutionAnimations: true, bounceCompanionWhileRunning: true }),
 			},
 		});
 
@@ -354,6 +381,46 @@ describe("Pokemon collection app", () => {
 		slot.lifecycle.unmount();
 	});
 
+	it("bounces the companion while agents run only when the saved preference allows it", async () => {
+		const app = await loadPluginApp(() => import("./app"));
+		const floatingOverlay = app.appOverlays.find(({ id }) => id === "floating-companion")!;
+		const headerAction = app.threadHeaderActions.find(({ id }) => id === "companion")!;
+		let bounceCompanionWhileRunning = true;
+		const options = {
+			rpc: {
+				collection_get: () => collection,
+				preferences_get: () => ({ showEvolutionAnimations: true, bounceCompanionWhileRunning }),
+			},
+			sidebarThreads: { threads: [runningThread] },
+		};
+		const floating = renderSlot(floatingOverlay, {}, options);
+		const header = renderSlot(headerAction, { threadId: runningThread.id, isCompactViewport: false }, options);
+		const floatingCompanion = async () => vi.waitFor(() => {
+			const element = document.body.querySelector(".pokemon-floating-companion");
+			expect(element).toBeTruthy();
+			return element!;
+		});
+		const headerSprite = async () => vi.waitFor(() => {
+			const element = header.container.querySelector(".pokemon-evolution-stage");
+			expect(element).toBeTruthy();
+			return element!;
+		});
+
+		await vi.waitFor(async () => expect((await floatingCompanion()).classList.contains("pokemon-bouncing")).toBe(true));
+		await vi.waitFor(async () => expect((await headerSprite()).classList.contains("pokemon-bouncing")).toBe(true));
+
+		bounceCompanionWhileRunning = false;
+		await floating.behavior.emitRealtime("preferences-changed", { showEvolutionAnimations: true, bounceCompanionWhileRunning });
+		await header.behavior.emitRealtime("preferences-changed", { showEvolutionAnimations: true, bounceCompanionWhileRunning });
+
+		await vi.waitFor(async () => expect((await floatingCompanion()).classList.contains("pokemon-bouncing")).toBe(false));
+		await vi.waitFor(async () => expect((await headerSprite()).classList.contains("pokemon-bouncing")).toBe(false));
+		expect((await floatingCompanion()).getAttribute("title")).toContain("Running with your agent!");
+		expect(header.getByRole("button").getAttribute("aria-label")).toContain("running with your agent");
+		floating.lifecycle.unmount();
+		header.lifecycle.unmount();
+	});
+
 	it("uses a shorter opacity-only timeline when reduced motion is requested", async () => {
 		vi.stubGlobal("matchMedia", vi.fn((media: string) => ({
 			matches: media === "(prefers-reduced-motion: reduce)",
@@ -370,7 +437,7 @@ describe("Pokemon collection app", () => {
 		let preferenceReads = 0;
 		const slot = renderSlot(overlay, {}, {
 			rpc: {
-				preferences_get: () => { preferenceReads += 1; return { showEvolutionAnimations: true }; },
+				preferences_get: () => { preferenceReads += 1; return { showEvolutionAnimations: true, bounceCompanionWhileRunning: true }; },
 			},
 		});
 		await vi.waitFor(() => expect(preferenceReads).toBe(1));
@@ -403,7 +470,7 @@ describe("Pokemon collection app", () => {
 		const overlay = app.appOverlays.find(({ id }) => id === "evolution-experience")!;
 		const overlaySlot = renderSlot(overlay, {}, {
 			rpc: {
-				preferences_get: () => ({ showEvolutionAnimations: false }),
+				preferences_get: () => ({ showEvolutionAnimations: false, bounceCompanionWhileRunning: true }),
 			},
 		});
 		const collectionSlot = renderSlot(app.navPanels[0]!, { subPath: "" }, {
@@ -482,11 +549,11 @@ describe("Pokemon collection app", () => {
 
 	it("opens a settings route with repository and project-management controls", async () => {
 		const app = await loadPluginApp(() => import("./app"));
-		const updates: Array<{ watchedRepositories: string[]; projectManagementTool: string; showEvolutionAnimations: boolean }> = [];
+		const updates: Array<{ watchedRepositories: string[]; projectManagementTool: string; showEvolutionAnimations: boolean; bounceCompanionWhileRunning: boolean }> = [];
 		const slot = renderSlot(app.navPanels[0]!, { subPath: "settings" }, {
 			rpc: {
 				settings_get: () => pokemonSettings,
-				settings_update: (input: { watchedRepositories: string[]; projectManagementTool: "shortcut" | "jira" | "github_issues"; showEvolutionAnimations: boolean }) => {
+				settings_update: (input: { watchedRepositories: string[]; projectManagementTool: "shortcut" | "jira" | "github_issues"; showEvolutionAnimations: boolean; bounceCompanionWhileRunning: boolean }) => {
 					updates.push(input);
 					return { ...pokemonSettings, ...input };
 				},
@@ -500,12 +567,14 @@ describe("Pokemon collection app", () => {
 		fireEvent.click(slot.getByText("1 repository selected"));
 		fireEvent.click(slot.getByRole("checkbox", { name: /acme\/secret-lab/i }));
 		fireEvent.click(slot.getByRole("checkbox", { name: "Show evolution and hatching animations" }));
+		fireEvent.click(slot.getByRole("checkbox", { name: "Bounce companion while agents run" }));
 		fireEvent.click(slot.getByRole("button", { name: /Jira/ }));
 		fireEvent.click(slot.getByRole("button", { name: "Save settings" }));
 		await vi.waitFor(() => expect(updates).toEqual([{
 			watchedRepositories: ["acme/pokedex", "acme/secret-lab"],
 			projectManagementTool: "jira",
 			showEvolutionAnimations: false,
+			bounceCompanionWhileRunning: false,
 		}]));
 
 		slot.lifecycle.unmount();

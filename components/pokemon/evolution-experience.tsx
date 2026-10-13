@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { useRealtime } from "@get-bb/plugin-sdk/app";
 import { Button } from "@/components/ui/button";
+import { usePreferences } from "../../hooks/use-preferences";
 import { spriteUrl } from "../../lib/pokemon/media";
-import type { rpcContract } from "../../server";
 
 const EXPERIENCE_PREVIEW_EVENT = "pokemon-catcher:preview-experience";
 
@@ -266,16 +266,9 @@ function HatchModal({ hatch, onClose }: { hatch: Hatch; onClose: () => void }) {
 }
 
 export function EvolutionExperience() {
-	const rpc = useRpc<typeof rpcContract>();
-	const [enabled, setEnabled] = useState<boolean | null>(null);
+	const enabled = usePreferences()?.showEvolutionAnimations ?? null;
 	const [experiences, setExperiences] = useState<Experience[]>([]);
 
-	const loadPreference = useCallback(() => {
-		rpc.call("preferences_get").then(({ showEvolutionAnimations }) => setEnabled(showEvolutionAnimations), () => setEnabled(false));
-	}, [rpc]);
-
-	useEffect(loadPreference, [loadPreference]);
-	useRealtime("preferences-changed", loadPreference);
 	useRealtime("collection-changed", (payload) => {
 		const next = [...readEvolutions(payload), ...readHatches(payload)];
 		if (next.length > 0) setExperiences((current) => [...current, ...next]);
